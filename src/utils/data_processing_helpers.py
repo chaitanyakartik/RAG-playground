@@ -85,4 +85,7 @@ def create_text_summaries(text_chunks, model):
     for text in text_chunks:
         result = model.generate_content(text + query)
         text_summaries.append(result.text)
-    return text_summaries
+    return text_summaries 
+
+def another_function():
+    pass
