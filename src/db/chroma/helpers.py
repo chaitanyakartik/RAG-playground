@@ -22,12 +22,21 @@ def create_vectorstore(embedding_model, persist_path="./chroma_db"):
 
 def create_retriever(vectorstore, id_key="doc_id", persist_path="./chroma_docstore"):
     store = LocalFileStore(persist_path)
-    return MultiVectorRetriever(
-        vectorstore=vectorstore,
-        docstore=store,
-        id_key=id_key,
-        search_kwargs={"k": 5}  # Increase number of results returned
+    
+    # Use a simpler retriever setup - the MultiVectorRetriever might be causing issues
+    # Direct vectorstore retriever tends to be more reliable for basic retrieval
+    return vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwargs={"k": 5}
     )
+    
+    # If you still need MultiVectorRetriever, use this instead:
+    # return MultiVectorRetriever(
+    #     vectorstore=vectorstore,
+    #     docstore=store,
+    #     id_key=id_key,
+    #     search_kwargs={"k": 5}
+    # )
 
 def create_documents(texts: list[str], id_key: str) -> tuple[list[Document], list[str]]:
     doc_ids = [str(uuid.uuid4()) for _ in texts]

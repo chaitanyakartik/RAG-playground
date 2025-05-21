@@ -14,6 +14,7 @@ from src.utils.data_processing_helpers import (
     create_text_summaries,
 )
 import logging
+from langchain.schema import Document
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 def doc_ingestion_pipe(
     doc_path: str,
     persist_path: str = "./chroma_db",
+    include_raw_text: bool = True,
+    include_summaries: bool = True,
+    include_images: bool = True,
 ):
     """
     Ingests a document (PDF or DOCX) and stores its content in a vector database.
@@ -29,6 +33,9 @@ def doc_ingestion_pipe(
     Args:
         doc_path (str): Path to the document.
         persist_path (str): Path to the directory where the vector database will be stored.
+        include_raw_text (bool): Whether to include raw text chunks in the vectorstore.
+        include_summaries (bool): Whether to include text summaries in the vectorstore.
+        include_images (bool): Whether to include image descriptions in the vectorstore.
 
     Returns:
         None
@@ -66,30 +73,44 @@ def doc_ingestion_pipe(
     text_chunks = split_string_into_chunks(text)
     logger.info(f"Split text into {len(text_chunks)} chunks.")
 
-    logger.info("Generating image descriptions...")
-    image_descriptions = [get_image_descriptions(img) for img in images]
-
-    logger.info("Generating text summaries...")
-    text_summaries = create_text_summaries(text_chunks, embedding_model)
-
-    # Create documents
-    logger.info("Creating document objects...")
-    text_summaries_docs, text_summaries_id = create_documents(text_summaries, "text_id")
-    visual_descriptions_docs, visual_descriptions_id = create_documents(
-        image_descriptions, "image_id"
-    )
-
-    # Store in vectorstore
-    logger.info("Adding text summaries to vectorstore and docstore...")
-    retriever.vectorstore.add_documents(text_summaries_docs)
-    retriever.docstore.mset(
-        [(doc_id, chunk.encode("utf-8")) for doc_id, chunk in zip(text_summaries_id, text_chunks)]
-    )
-    logger.info("Adding image descriptions to vectorstore and docstore...")
-    retriever.vectorstore.add_documents(visual_descriptions_docs)
-    retriever.docstore.mset(
-        [(doc_id, str(image_path).encode("utf-8")) for doc_id, image_path in zip(visual_descriptions_id, images)]
-    )
+    # Choose whether to include raw text, summaries, or both based on parameters
+    if include_raw_text:
+        # Store the raw text chunks directly in the vector store
+        raw_text_docs = [Document(page_content=chunk, 
+                                 metadata={"source": doc_path, "type": "text", "chunk_id": f"chunk_{i}"}) 
+                        for i, chunk in enumerate(text_chunks)]
+        
+        # Add the raw chunks directly to the vectorstore
+        logger.info("Adding raw text chunks to vectorstore...")
+        vectorstore.add_documents(raw_text_docs)
+    
+    if include_summaries:
+        # Process summaries
+        logger.info("Generating text summaries...")
+        text_summaries = create_text_summaries(text_chunks, embedding_model)
+        
+        # Create documents with summaries
+        text_summaries_docs = [Document(page_content=summary, 
+                                      metadata={"source": doc_path, "type": "summary", "chunk_id": f"summary_{i}"}) 
+                             for i, summary in enumerate(text_summaries)]
+        
+        # Store in vectorstore
+        logger.info("Adding text summaries to vectorstore...")
+        vectorstore.add_documents(text_summaries_docs)
+    
+    if include_images and images:
+        # Process images
+        logger.info("Generating image descriptions...")
+        image_descriptions = [get_image_descriptions(img) for img in images]
+        
+        # Create documents with image descriptions
+        visual_descriptions_docs = [Document(page_content=desc, 
+                                          metadata={"source": img_path, "type": "image", "image_id": f"image_{i}"}) 
+                                  for i, (desc, img_path) in enumerate(zip(image_descriptions, images))]
+        
+        # Store in vectorstore
+        logger.info("Adding image descriptions to vectorstore...")
+        vectorstore.add_documents(visual_descriptions_docs)
+    
     vectorstore.persist()
-
     logger.info("Ingestion completed successfully.")
