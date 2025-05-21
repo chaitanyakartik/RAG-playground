@@ -1,9 +1,9 @@
 import pdfplumber
 import fitz  # PyMuPDF
 import os
-from IPython.display import display, Image
 import os
 from docx import Document
+from PIL import Image
 
 from src.utils.prompts import DESCRIBE_IMAGE_PROMPT,SUMMARIZE_TEXT_PROMPT
 from src.utils.models import Gemini_Model
@@ -56,7 +56,7 @@ def extract_text_from_docx(docx_file):
         text += paragraph.text + '\n'
     return text
 
-async def get_image_descriptions(image_path: str, history: list[dict]=[]):
+def get_image_descriptions(image_path: str, history: list[dict]=[]):
     #Get image description
     template= DESCRIBE_IMAGE_PROMPT["template"]
     image_model = Gemini_Model(model_name="gemini-2.0-flash")
@@ -82,9 +82,12 @@ def split_string_into_chunks(long_text, max_chunk_size=3000):
 def create_text_summaries(text_chunks, model):
     text_summaries = []
     query = SUMMARIZE_TEXT_PROMPT["template"]
+
+    text_model = Gemini_Model(model_name="gemini-2.0-flash")
+
     for text in text_chunks:
-        result = model.generate_content(text + query)
-        text_summaries.append(result.text)
+        result = text_model.generate(text + query)
+        text_summaries.append(text)
     return text_summaries 
 
 def another_function():

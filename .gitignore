@@ -9,3 +9,6 @@ ENV/
 env/
 .env
 .venv/
+
+chroma_db/
+chroma_docstore/

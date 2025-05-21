@@ -13,11 +13,6 @@ from src.utils.data_processing_helpers import (
     split_string_into_chunks,
     create_text_summaries,
 )
-import logging
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 def doc_ingestion_pipe(
     doc_path: str,
@@ -33,63 +28,37 @@ def doc_ingestion_pipe(
     Returns:
         None
     """
-    logger.info(f"Starting ingestion for: {doc_path}")
-
     # Create embedding model
-    logger.info("Creating embedding model...")
     embedding_model = create_embedding_model()
 
     # Create vectorstore
-    logger.info("Creating vectorstore...")
     vectorstore = create_vectorstore(embedding_model, persist_path)
-
-    # Create retriever
-    logger.info("Creating retriever...")
     retriever = create_retriever(vectorstore)
 
-    # Extract text and images
-    logger.info("Extracting content from document...")
+    # Extract text and images from the document
     if doc_path.endswith(".pdf"):
         text = extract_text_from_pdf(doc_path)
-        images = extract_images_from_pdf(doc_path, output_dir=persist_path)
-        logger.info(f"Extracted text and {len(images)} images from PDF.")
+        images = extract_images_from_pdf(doc_path)
     elif doc_path.endswith(".docx"):
         text = extract_text_from_docx(doc_path)
         images = []
-        logger.info("Extracted text from DOCX.")
     else:
-        logger.error("Unsupported file format. Must be PDF or DOCX.")
         raise ValueError("Unsupported file format. Please provide a PDF or DOCX file.")
 
-    # Process content
-    logger.info("Processing text chunks...")
+    # Process images and text
     text_chunks = split_string_into_chunks(text)
-    logger.info(f"Split text into {len(text_chunks)} chunks.")
 
-    logger.info("Generating image descriptions...")
     image_descriptions = [get_image_descriptions(img) for img in images]
-
-    logger.info("Generating text summaries...")
     text_summaries = create_text_summaries(text_chunks, embedding_model)
 
-    # Create documents
-    logger.info("Creating document objects...")
+    # Create documents for text and images
     text_summaries_docs, text_summaries_id = create_documents(text_summaries, "text_id")
     visual_descriptions_docs, visual_descriptions_id = create_documents(
         image_descriptions, "image_id"
     )
 
-    # Store in vectorstore
-    logger.info("Adding text summaries to vectorstore and docstore...")
     retriever.vectorstore.add_documents(text_summaries_docs)
-    retriever.docstore.mset(
-        [(doc_id, chunk.encode("utf-8")) for doc_id, chunk in zip(text_summaries_id, text_chunks)]
-    )
-    logger.info("Adding image descriptions to vectorstore and docstore...")
-    retriever.vectorstore.add_documents(visual_descriptions_docs)
-    retriever.docstore.mset(
-        [(doc_id, str(image_path).encode("utf-8")) for doc_id, image_path in zip(visual_descriptions_id, images)]
-    )
-    vectorstore.persist()
+    retriever.docstore.mset(list(zip(text_summaries_id, text_chunks)))
 
-    logger.info("Ingestion completed successfully.")
+    retriever.vectorstore.add_documents(visual_descriptions_docs)
+    retriever.docstore.mset(list(zip(visual_descriptions_id, images)))
